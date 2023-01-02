@@ -457,7 +457,9 @@ def burstAnalysisSE_WithRaw(photonData, burstData = pd.DataFrame({}), debug = Fa
 
 	E = (numAD) / (numDD + numAD)
 	S = (numAD + numDD) / (numDD + numAD + numAA)
+	rawBurstLen = rawAA + rawDD + rawAD
 	
+	burstData['rawBurstLen'] = rawBurstLen
 
 	burstData['rawDD'] = rawDD
 	burstData['noiseDD'] = bgDD
