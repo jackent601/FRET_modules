@@ -245,6 +245,10 @@ def LoadPTU(filename, header_only = False, chatty = True):
 
 		return [tagNames, tagValues, globRes, Res, dtime, nsync, channel]
 
+"""
+UTILITIES
+"""
+
 # Basic Lee Filter
 def LeeFilter(I, windowSize = 5):
 	movingMean = uniform_filter(I, windowSize)
@@ -376,7 +380,7 @@ def findBurst(photonData, params, debug=True):
 
 # Burst analysis, outputting df with S and E values and applies bleaching filter
 # Retains Noise info to check when noise is greater than signal
-def JE_burstAnalysisSE_WithRaw(photonData, burstData = pd.DataFrame({}), debug = False):
+def burstAnalysisSE_WithRaw(photonData, burstData = pd.DataFrame({}), debug = False):
 
 	burstNumber = int(max(photonData['burst'].values) + 1)
 	noiseNumber = int(max(photonData['noise'].values) + 1)
@@ -474,110 +478,12 @@ def JE_burstAnalysisSE_WithRaw(photonData, burstData = pd.DataFrame({}), debug =
 
 	return photonData, burstData
 
-def JE_multiple_photon_files(file_list, tBounds, params, tauSettings = None, debug=False):
-	"""
-	Loop through all photon data
-	Note: The total data set should first be combined then the burst analysis done, this would require updating macroscopic times
-	"""
-
-	all_burst_data = []
-
-	for this_sample in file_list:
-
-		# Get Photon Data
-		photon_data = getPhotonData(file=this_sample, tBounds=tBounds)
-
-		# Find and Label Bursts
-		burst_labeled_photon_data = findBurst(photonData = photon_data, params=params, debug=debug)
-
-		# Analyse Bursts
-		burst_labeled_photon_data, burst_data = JE_burstAnalysisSE_WithRaw(photonData=burst_labeled_photon_data, burstData = pd.DataFrame({}))
-
-		# ALEX FRET 2 CDE Calculations for corrections
-		burst_labeled_photon_data, burst_data = burstAnalysis2CDE(photonData = burst_labeled_photon_data, burstData = burst_data)
-		
-		# tau calculations
-		if tauSettings is not None:
-			burst_labeled_photon_data, burst_data = burstAnalysisTau(photonData = burst_labeled_photon_data, tauSettings = tauSettings, burstData = burst_data)
-		
-		if debug:
-			print(f'Adding: {this_sample}')
-			print(f'photo data length: {len(photon_data)}')
-			print(f'burst labelled photon data length: {len(burst_labeled_photon_data)}')
-			print(f'ALEX 2 CDE: {len(burst_data)}')	
-		
-		all_burst_data.append(burst_data)
-	return pd.concat(all_burst_data, ignore_index=True)
-
-def JE_unpack_burst_values(burstData):
+def unpack_burst_values(burstData):
 	return burstData['rawDD'], burstData['rawAD'], burstData['rawAA'], burstData['DD'], burstData['AD'], burstData['AA'], burstData['E'], burstData['S'], burstData['ALEX2CDE'], burstData['FRET2CDE'], burstData['duration']
 
-
-# Burst analysis, outputting df with S and E values and applies bleaching filter
-def burstAnalysisSE(photonData, burstData = pd.DataFrame({})):
-
-	burstNumber = int(max(photonData['burst'].values) + 1)
-	noiseNumber = int(max(photonData['noise'].values) + 1)
-
-	# Calculate background signal in units of photons per second. Noise rates should be around 1 kHz
-	noiseDD = 0
-	noiseAD = 0
-	noiseAA = 0
-	noiseT = 0
-	
-	for i in range(noiseNumber):
-		_df = photonData[photonData['noise'] == i]
-		noiseT += (_df['T'].values[-1] - _df['T'].values[0])
-		noiseDD += len(_df[_df['DD']]) - 1
-		noiseAD += len(_df[_df['AD']]) - 1
-		noiseAA += len(_df[_df['AA']]) - 1
-	
-	if noiseT != 0:
-		noiseDD /= noiseT
-		noiseAD /= noiseT
-		noiseAA /= noiseT
-
-	print('Noise rates:\nDD : {0:.2g} kHz\nAD : {1:.2g} kHz\nAA : {2:.2g} kHz\n'.format(noiseDD/1000, noiseAD/1000, noiseAA/1000))
-
-	# Calculate photon counts per burst and burst duration
-
-	numDD = np.zeros(burstNumber)
-	numAD = np.zeros(burstNumber)
-	numAA = np.zeros(burstNumber)
-	burstDuration = np.zeros(burstNumber)
-
-	TDA = np.zeros(burstNumber)
-
-	E = np.zeros(burstNumber)
-	S = np.zeros(burstNumber)
-	
-	for i in range(burstNumber):
-		_df = photonData[photonData.burst == i]
-		burstDuration[i] = _df['T'].values[-1] - _df['T'].values[0]
-		numDD[i] = len(_df[_df['DD']]) - 1 - noiseDD * burstDuration[i]
-		numAD[i] = len(_df[_df['AD']]) - 1 - noiseAD * burstDuration[i]
-		numAA[i] = len(_df[_df['AA']]) - 1 - noiseAA * burstDuration[i]
-
-		DPhotons = _df.loc[((_df['channel'] == 0) | (_df['AD'])), 'T']
-		APhotons = _df.loc[_df['AA'], 'T']
-		if (len(DPhotons) == 0) | (len(APhotons) == 0):
-			TDA[i] = 0
-		else:
-			TDA[i] = DPhotons.mean() - APhotons.mean()
-
-	E = (numAD) / (numDD + numAD)
-	S = (numAD + numDD) / (numDD + numAD + numAA)
-	
-	burstData['DD'] = numDD
-	burstData['AD'] = numAD
-	burstData['AA'] = numAA
-	burstData['E'] = E
-	burstData['S'] = S
-	burstData['TDA'] = TDA
-	burstData['duration'] = burstDuration
-
-	return photonData, burstData
-
+"""
+ALEX2CDE AND FRET2CDE
+"""
 # Burst search, calculates ALEX2CDE and FRET2CDE values
 def burstAnalysis2CDE(photonData, burstData = pd.DataFrame({})):
 
@@ -663,6 +569,10 @@ def burstAnalysis2CDE(photonData, burstData = pd.DataFrame({})):
 	burstData['FRET2CDE'] = FRET2CDE
 
 	return photonData, burstData
+
+"""
+TAU ANALYSIS
+"""
 
 # Burst search for lifetime
 def burstAnalysisTau(photonData, tauSettings, burstData = pd.DataFrame({})):
@@ -763,6 +673,270 @@ def burstAnalysisTau(photonData, tauSettings, burstData = pd.DataFrame({})):
 	burstData['tauA'] = tau[1]
 
 	return photonData, burstData
+
+def parse_multiple_photon_files(file_list, tBounds, params, tauSettings = None, debug=False):
+	"""
+	Loop through all photon data
+	Note: The total data set should first be combined then the burst analysis done, this would require updating macroscopic times
+	"""
+
+	all_burst_data = []
+
+	for this_sample in file_list:
+
+		# Get Photon Data
+		photon_data = getPhotonData(file=this_sample, tBounds=tBounds)
+
+		# Find and Label Bursts
+		burst_labeled_photon_data = findBurst(photonData = photon_data, params=params, debug=debug)
+
+		# Analyse Bursts
+		burst_labeled_photon_data, burst_data = burstAnalysisSE_WithRaw(photonData=burst_labeled_photon_data, burstData = pd.DataFrame({}))
+
+		# ALEX FRET 2 CDE Calculations for corrections
+		burst_labeled_photon_data, burst_data = burstAnalysis2CDE(photonData = burst_labeled_photon_data, burstData = burst_data)
+		
+		# tau calculations
+		if tauSettings is not None:
+			burst_labeled_photon_data, burst_data = burstAnalysisTau(photonData = burst_labeled_photon_data, tauSettings = tauSettings, burstData = burst_data)
+		
+		if debug:
+			print(f'Adding: {this_sample}')
+			print(f'photo data length: {len(photon_data)}')
+			print(f'burst labelled photon data length: {len(burst_labeled_photon_data)}')
+			print(f'ALEX 2 CDE: {len(burst_data)}')	
+		
+		all_burst_data.append(burst_data)
+	return pd.concat(all_burst_data, ignore_index=True)
+
+"""
+PRELIMINARY / EXPLORATORY DATA ANALYSIS 
+"""
+
+# Visualise preliminary data processing
+def visualiseIRF(file, IRFfiles, tBounds):
+
+	colors = ['blue', 'red']
+	tD = tBounds[0]
+	tA = tBounds[1]
+
+	# Initialise figure
+	fig, axes = plt.subplots(2, 1, figsize = (6,4), sharex = True)
+	axes = axes.reshape(-1)
+
+	# Reading ptu file
+	[tagNames, tagValues, globRes, Res, dtime, nsync, channel] = LoadPTU(file, chatty = False)
+
+	tBins = np.arange(int(globRes / Res))
+	tHist = []
+	for i in range(2):
+		_tHist, _tBins = np.histogram(dtime[channel == i] + 0.5, tBins)
+		tHist.append(_tHist)
+	tBins = tBins[:-1] + 0.5
+
+	# Make the masks
+	tBinMasks = []
+	tBinMasks.append(tBins * Res * 1e9 < tD[0])
+	tBinMasks.append((tBins * Res * 1e9 > tD[0]) & (tBins * Res * 1e9 < tD[1]))
+	tBinMasks.append((tBins * Res * 1e9 > tD[1]) & (tBins * Res * 1e9 < tA[0]))
+	tBinMasks.append((tBins * Res * 1e9 > tA[0]) & (tBins * Res * 1e9 < tA[1]))
+	tBinMasks.append((tBins * Res * 1e9 > tA[1]))
+
+	for i in range(2):
+		for j in range(5):
+			_mask = tBinMasks[j]
+			_a = 1 if ((j == 1) | (j == 3)) else 0.25
+			axes[i].plot(tBins[_mask] * Res * 1e9, tHist[i][_mask], color = colors[i], alpha = _a, zorder = 1, linewidth = 0.5)
+			axes[i].set_yscale('log')
+		axes[i].set_ylabel('counts')
+		
+
+	# Plot IRF histograms
+	for i in range(2):
+		[_tagNames, _tagValues, _globRes, _Res, _dtime, _nsync, _channel] = LoadPTU(IRFfiles[i], header_only = False, chatty = False)
+		# Calculate decay histogram
+		_tBins = np.arange(int(_globRes/_Res))
+		_hist, _bins = np.histogram(_dtime[_channel == i] + 0.5, bins = _tBins)
+		_tBins = _tBins[:-1] + 0.5
+		_maxHist = max(tHist[i])
+		_maxIRFHist = max(_hist)
+		axes[i].plot(_tBins * _Res * 1e9, _hist * _maxHist / _maxIRFHist, color = 'grey', alpha = 0.25, zorder = 0, linewidth = 0.5)
+	axes[1].set_xlabel('t(ns)')
+	axes[1].set_xlim(0, globRes * 1e9)
+
+# Preliminary burst search
+def testBurstSearch(file, tBounds, params, plotting = [0, 10000]):
+	# Reading ptu file
+	[tagNames, tagValues, globRes, Res, dtime, nsync, channel] = LoadPTU(file, chatty = False)
+
+	# Data
+	df = pd.DataFrame({
+		't' : (dtime + 0.5) * Res * 1e9,
+		'T' : nsync * globRes + dtime * Res,
+		'channel' : channel
+		})
+	# Write to df re. D/A information
+	df['DD'] = False
+	df['AD'] = False
+	df['AA'] = False
+	tD = tBounds[0]
+	tA = tBounds[1]
+	df['DD'] = (df['t'].values > tD[0]) & (df['t'].values < tD[1]) & (df['channel'] == 0)
+	df['AD'] = (df['t'].values > tD[0]) & (df['t'].values < tD[1]) & (df['channel'] == 1)
+	df['AA'] = (df['t'].values > tA[0]) & (df['t'].values < tA[1]) & (df['channel'] == 1)
+
+	# Calculate raw interphoton times with Lee filter
+	interPhotonTime = df['T'].values[1:] - df['T'].values[:-1]
+	interPhotonTime = LeeFilter(interPhotonTime)
+	
+	burstLoc = np.argwhere(interPhotonTime < params['burstCut'])[:, 0]
+	burstLoc = np.append(burstLoc, burstLoc[-1])
+	
+	noiseLoc = np.argwhere(interPhotonTime > params['noiseCut'])[:, 0]
+	noiseLoc = np.append(noiseLoc, noiseLoc[-1])
+	
+	burstIdx = np.insert(np.where(burstLoc[1:] - burstLoc[:-1] > 1)[0] + 1, 0, 0)
+	noiseIdx = np.insert(np.where(noiseLoc[1:] - noiseLoc[:-1] > 1)[0] + 1, 0, 0)
+	
+	burstLen = np.zeros(len(burstIdx)).astype(np.int)
+	for i in range(len(burstIdx)):
+		_length = 1
+		_idx = burstIdx[i]
+		while burstLoc[_idx+1] == burstLoc[_idx] + 1:
+			_length += 1
+			_idx += 1
+		burstLen[i] = _length
+		
+	noiseLen = np.zeros(len(noiseIdx)).astype(np.int)
+	for i in range(len(noiseIdx)):
+		_length = 1
+		_idx = noiseIdx[i]
+		while noiseLoc[_idx+1] == noiseLoc[_idx] + 1:
+			_length += 1
+			_idx += 1
+		noiseLen[i] = _length
+		
+	burstMask = burstLen > params['burstLen']
+	trueBurstIdx = burstIdx[burstMask]
+	trueBurstLen = burstLen[burstMask]
+	
+	noiseMask = noiseLen > params['noiseLen']
+	trueNoiseIdx = noiseIdx[noiseMask]
+	trueNoiseLen = noiseLen[noiseMask]
+	
+	# Write to df re. burst and noise state
+	df['burst'] = int(-1)
+	df['noise'] = int(-1)
+	
+	for i in range(len(trueBurstIdx)):
+		_i = int(burstLoc[trueBurstIdx[i]])
+		_j = int(burstLoc[trueBurstIdx[i] + trueBurstLen[i] - 1] + 1)
+		df.loc[_i: _j, 'burst'] = np.ones(len(df.loc[_i : _j, 'burst']), dtype = int) * i
+	
+	for i in range(len(trueNoiseIdx)):
+		_i = int(noiseLoc[trueNoiseIdx[i]])
+		_j = int(noiseLoc[trueNoiseIdx[i] + trueNoiseLen[i] - 1] + 1)
+		df.loc[_i: _j, 'noise'] = np.ones(len(df.loc[_i : _j, 'noise']), dtype = int) * i
+		
+	print('Burst count: {0:}\nNoise count: {1:}\n'.format(len(trueBurstIdx), len(trueNoiseIdx)))
+
+	# Calculate background signal in units of photons per second. Noise rates should be around 1 kHz
+	noiseDD = 0
+	noiseAD = 0
+	noiseAA = 0
+	noiseT = 0
+	
+	for i in range(len(trueNoiseIdx)):
+		_df = df[df['noise'] == i]
+		noiseT += (_df['T'].values[-1] - _df['T'].values[0])
+		noiseDD += len(_df[_df['DD']]) - 1
+		noiseAD += len(_df[_df['AD']]) - 1
+		noiseAA += len(_df[_df['AA']]) - 1
+	
+	if noiseT != 0:
+		noiseDD /= noiseT
+		noiseAD /= noiseT
+		noiseAA /= noiseT
+
+	print('Noise rates:\nDD : {0:.2g} kHz\nAD : {1:.2g} kHz\nAA : {2:.2g} kHz\n'.format(noiseDD/1000, noiseAD/1000, noiseAA/1000))
+
+	plt.figure(figsize=(9,4))
+	_start = 0
+	_end = len(interPhotonTime)
+	_interPhotonTimeSlice = interPhotonTime[_start:_end] 
+	_n = np.arange(_start, _end)
+	plt.plot(_n, _interPhotonTimeSlice * 1e6, alpha = 0.25, color = 'grey', zorder = 0, linewidth = 0.5)
+	
+	for i in range(len(trueBurstIdx)):
+		_i = burstLoc[trueBurstIdx[i]]
+		_j = burstLoc[trueBurstIdx[i] + trueBurstLen[i] - 1] + 1
+		if (_i > _start) & (_j < (_end)):
+			plt.plot(np.arange(_i, _j), interPhotonTime[_i : _j] * 1e6 , color = 'red', zorder = 5, linewidth = 0.5)
+	
+	for i in range(len(trueNoiseIdx)):
+		_i = noiseLoc[trueNoiseIdx[i]]
+		_j = noiseLoc[trueNoiseIdx[i] + trueNoiseLen[i] - 1] + 1
+		if (_i > _start) & (_j < (_end)):
+			plt.plot(np.arange(_i, _j), interPhotonTime[_i : _j] * 1e6, color = 'blue', zorder = 2, linewidth = 0.5)
+	
+	plt.xlim(plotting[0], plotting[1])
+	plt.ylim(0, 1000)
+	plt.xlabel('photon number')
+	plt.ylabel('inter photon time (us)')
+
+# Test burst cutoff parameter
+def verifyBurstCut(sample, maxCut, minCut, cutNum, maxLen):
+
+	# Reading ptu file
+	[tagNames, tagValues, globRes, Res, dtime, nsync, channel] = LoadPTU(sample, chatty = False)
+	T = np.array(nsync * globRes + dtime * Res)
+
+	# Calculate raw interphoton times with Lee filter
+	interPhotonTime = T[1:] - T[:-1]
+	interPhotonTime = LeeFilter(interPhotonTime)
+
+	plt.figure()
+
+	bins = np.linspace(0, maxLen, 50)
+	jet = cm.get_cmap('jet', cutNum + 2)
+	cuts = np.linspace(minCut, maxCut, cutNum)
+	for i in range(cutNum):
+		# Finds all photons that are part of a burst
+		# Specifically find indices where inter-photon time is less than threshold
+		burstLoc = np.argwhere(interPhotonTime < cuts[i])[:, 0]
+
+		# TODO - Add an extra index?
+		burstLoc = np.append(burstLoc, burstLoc[-1])
+
+		# Finds the _index_ in burstLoc of where each burst begins in burstLoc
+		# because the array in np.where is made from burstLoc[1:] each indice found must add 1 to account for array subsection
+		# finally prepend with zero to account for very first burst index that is lost
+		burstIdx = np.insert(np.where(burstLoc[1:] - burstLoc[:-1] > 1)[0] + 1, 0, 0)
+
+		# Initialise Burst length array to be populated
+		burstLen = np.zeros(len(burstIdx)).astype(np.int)
+
+		for j in range(len(burstIdx)):
+			_length = 1
+			# Remember burstIdx is an index for the first burst photon in burstLoc
+			_idx = burstIdx[j]
+			while burstLoc[_idx+1] == burstLoc[_idx] + 1:
+				# if the indexes are adjacent in *burstLoc* then photon in _same_ burst
+				_length += 1
+				_idx += 1
+			burstLen[j] = _length
+		_hist, _bins = np.histogram(burstLen, bins = bins)
+		if (i == 0) | (i == cutNum - 1):
+			plt.plot(_bins[1:], _hist, color = jet(i + 1), label = '{0:.2g} us'.format(cuts[i] * 1e6))
+		plt.plot(_bins[1:], _hist, color = jet(i + 1))
+	plt.legend()
+	plt.yscale('log')
+	plt.ylabel('counts')
+	plt.xlabel('burst length')
+
+"""
+OLD TAU CALCULATIONS
+"""
 
 # Burst search for lifetime
 def burstAnalysisTauDouble(photonData, tauSettings, burstData = pd.DataFrame({})):
@@ -1124,228 +1298,10 @@ def burstAnalysisTauOld(photonData, burstData = pd.DataFrame({}), IRFPaths = Non
 
 	return photonData, burstData
 
-# Visualise preliminary data processing
-def visualiseIRF(file, IRFfiles, tBounds):
 
-	colors = ['blue', 'red']
-	tD = tBounds[0]
-	tA = tBounds[1]
-
-	# Initialise figure
-	fig, axes = plt.subplots(2, 1, figsize = (6,4), sharex = True)
-	axes = axes.reshape(-1)
-
-	# Reading ptu file
-	[tagNames, tagValues, globRes, Res, dtime, nsync, channel] = LoadPTU(file, chatty = False)
-
-	tBins = np.arange(int(globRes / Res))
-	tHist = []
-	for i in range(2):
-		_tHist, _tBins = np.histogram(dtime[channel == i] + 0.5, tBins)
-		tHist.append(_tHist)
-	tBins = tBins[:-1] + 0.5
-
-	# Make the masks
-	tBinMasks = []
-	tBinMasks.append(tBins * Res * 1e9 < tD[0])
-	tBinMasks.append((tBins * Res * 1e9 > tD[0]) & (tBins * Res * 1e9 < tD[1]))
-	tBinMasks.append((tBins * Res * 1e9 > tD[1]) & (tBins * Res * 1e9 < tA[0]))
-	tBinMasks.append((tBins * Res * 1e9 > tA[0]) & (tBins * Res * 1e9 < tA[1]))
-	tBinMasks.append((tBins * Res * 1e9 > tA[1]))
-
-	for i in range(2):
-		for j in range(5):
-			_mask = tBinMasks[j]
-			_a = 1 if ((j == 1) | (j == 3)) else 0.25
-			axes[i].plot(tBins[_mask] * Res * 1e9, tHist[i][_mask], color = colors[i], alpha = _a, zorder = 1, linewidth = 0.5)
-			axes[i].set_yscale('log')
-		axes[i].set_ylabel('counts')
-		
-
-	# Plot IRF histograms
-	for i in range(2):
-		[_tagNames, _tagValues, _globRes, _Res, _dtime, _nsync, _channel] = LoadPTU(IRFfiles[i], header_only = False, chatty = False)
-		# Calculate decay histogram
-		_tBins = np.arange(int(_globRes/_Res))
-		_hist, _bins = np.histogram(_dtime[_channel == i] + 0.5, bins = _tBins)
-		_tBins = _tBins[:-1] + 0.5
-		_maxHist = max(tHist[i])
-		_maxIRFHist = max(_hist)
-		axes[i].plot(_tBins * _Res * 1e9, _hist * _maxHist / _maxIRFHist, color = 'grey', alpha = 0.25, zorder = 0, linewidth = 0.5)
-	axes[1].set_xlabel('t(ns)')
-	axes[1].set_xlim(0, globRes * 1e9)
-
-# Preliminary burst search
-def testBurstSearch(file, tBounds, params, plotting = [0, 10000]):
-	# Reading ptu file
-	[tagNames, tagValues, globRes, Res, dtime, nsync, channel] = LoadPTU(file, chatty = False)
-
-	# Data
-	df = pd.DataFrame({
-		't' : (dtime + 0.5) * Res * 1e9,
-		'T' : nsync * globRes + dtime * Res,
-		'channel' : channel
-		})
-	# Write to df re. D/A information
-	df['DD'] = False
-	df['AD'] = False
-	df['AA'] = False
-	tD = tBounds[0]
-	tA = tBounds[1]
-	df['DD'] = (df['t'].values > tD[0]) & (df['t'].values < tD[1]) & (df['channel'] == 0)
-	df['AD'] = (df['t'].values > tD[0]) & (df['t'].values < tD[1]) & (df['channel'] == 1)
-	df['AA'] = (df['t'].values > tA[0]) & (df['t'].values < tA[1]) & (df['channel'] == 1)
-
-	# Calculate raw interphoton times with Lee filter
-	interPhotonTime = df['T'].values[1:] - df['T'].values[:-1]
-	interPhotonTime = LeeFilter(interPhotonTime)
-	
-	burstLoc = np.argwhere(interPhotonTime < params['burstCut'])[:, 0]
-	burstLoc = np.append(burstLoc, burstLoc[-1])
-	
-	noiseLoc = np.argwhere(interPhotonTime > params['noiseCut'])[:, 0]
-	noiseLoc = np.append(noiseLoc, noiseLoc[-1])
-	
-	burstIdx = np.insert(np.where(burstLoc[1:] - burstLoc[:-1] > 1)[0] + 1, 0, 0)
-	noiseIdx = np.insert(np.where(noiseLoc[1:] - noiseLoc[:-1] > 1)[0] + 1, 0, 0)
-	
-	burstLen = np.zeros(len(burstIdx)).astype(np.int)
-	for i in range(len(burstIdx)):
-		_length = 1
-		_idx = burstIdx[i]
-		while burstLoc[_idx+1] == burstLoc[_idx] + 1:
-			_length += 1
-			_idx += 1
-		burstLen[i] = _length
-		
-	noiseLen = np.zeros(len(noiseIdx)).astype(np.int)
-	for i in range(len(noiseIdx)):
-		_length = 1
-		_idx = noiseIdx[i]
-		while noiseLoc[_idx+1] == noiseLoc[_idx] + 1:
-			_length += 1
-			_idx += 1
-		noiseLen[i] = _length
-		
-	burstMask = burstLen > params['burstLen']
-	trueBurstIdx = burstIdx[burstMask]
-	trueBurstLen = burstLen[burstMask]
-	
-	noiseMask = noiseLen > params['noiseLen']
-	trueNoiseIdx = noiseIdx[noiseMask]
-	trueNoiseLen = noiseLen[noiseMask]
-	
-	# Write to df re. burst and noise state
-	df['burst'] = int(-1)
-	df['noise'] = int(-1)
-	
-	for i in range(len(trueBurstIdx)):
-		_i = int(burstLoc[trueBurstIdx[i]])
-		_j = int(burstLoc[trueBurstIdx[i] + trueBurstLen[i] - 1] + 1)
-		df.loc[_i: _j, 'burst'] = np.ones(len(df.loc[_i : _j, 'burst']), dtype = int) * i
-	
-	for i in range(len(trueNoiseIdx)):
-		_i = int(noiseLoc[trueNoiseIdx[i]])
-		_j = int(noiseLoc[trueNoiseIdx[i] + trueNoiseLen[i] - 1] + 1)
-		df.loc[_i: _j, 'noise'] = np.ones(len(df.loc[_i : _j, 'noise']), dtype = int) * i
-		
-	print('Burst count: {0:}\nNoise count: {1:}\n'.format(len(trueBurstIdx), len(trueNoiseIdx)))
-
-	# Calculate background signal in units of photons per second. Noise rates should be around 1 kHz
-	noiseDD = 0
-	noiseAD = 0
-	noiseAA = 0
-	noiseT = 0
-	
-	for i in range(len(trueNoiseIdx)):
-		_df = df[df['noise'] == i]
-		noiseT += (_df['T'].values[-1] - _df['T'].values[0])
-		noiseDD += len(_df[_df['DD']]) - 1
-		noiseAD += len(_df[_df['AD']]) - 1
-		noiseAA += len(_df[_df['AA']]) - 1
-	
-	if noiseT != 0:
-		noiseDD /= noiseT
-		noiseAD /= noiseT
-		noiseAA /= noiseT
-
-	print('Noise rates:\nDD : {0:.2g} kHz\nAD : {1:.2g} kHz\nAA : {2:.2g} kHz\n'.format(noiseDD/1000, noiseAD/1000, noiseAA/1000))
-
-	plt.figure(figsize=(9,4))
-	_start = 0
-	_end = len(interPhotonTime)
-	_interPhotonTimeSlice = interPhotonTime[_start:_end] 
-	_n = np.arange(_start, _end)
-	plt.plot(_n, _interPhotonTimeSlice * 1e6, alpha = 0.25, color = 'grey', zorder = 0, linewidth = 0.5)
-	
-	for i in range(len(trueBurstIdx)):
-		_i = burstLoc[trueBurstIdx[i]]
-		_j = burstLoc[trueBurstIdx[i] + trueBurstLen[i] - 1] + 1
-		if (_i > _start) & (_j < (_end)):
-			plt.plot(np.arange(_i, _j), interPhotonTime[_i : _j] * 1e6 , color = 'red', zorder = 5, linewidth = 0.5)
-	
-	for i in range(len(trueNoiseIdx)):
-		_i = noiseLoc[trueNoiseIdx[i]]
-		_j = noiseLoc[trueNoiseIdx[i] + trueNoiseLen[i] - 1] + 1
-		if (_i > _start) & (_j < (_end)):
-			plt.plot(np.arange(_i, _j), interPhotonTime[_i : _j] * 1e6, color = 'blue', zorder = 2, linewidth = 0.5)
-	
-	plt.xlim(plotting[0], plotting[1])
-	plt.ylim(0, 1000)
-	plt.xlabel('photon number')
-	plt.ylabel('inter photon time (us)')
-
-# Test burst cutoff parameter
-def verifyBurstCut(sample, maxCut, minCut, cutNum, maxLen):
-
-	# Reading ptu file
-	[tagNames, tagValues, globRes, Res, dtime, nsync, channel] = LoadPTU(sample, chatty = False)
-	T = np.array(nsync * globRes + dtime * Res)
-
-	# Calculate raw interphoton times with Lee filter
-	interPhotonTime = T[1:] - T[:-1]
-	interPhotonTime = LeeFilter(interPhotonTime)
-
-	plt.figure()
-
-	bins = np.linspace(0, maxLen, 50)
-	jet = cm.get_cmap('jet', cutNum + 2)
-	cuts = np.linspace(minCut, maxCut, cutNum)
-	for i in range(cutNum):
-		# Finds all photons that are part of a burst
-		# Specifically find indices where inter-photon time is less than threshold
-		burstLoc = np.argwhere(interPhotonTime < cuts[i])[:, 0]
-
-		# TODO - Add an extra index?
-		burstLoc = np.append(burstLoc, burstLoc[-1])
-
-		# Finds the _index_ in burstLoc of where each burst begins in burstLoc
-		# because the array in np.where is made from burstLoc[1:] each indice found must add 1 to account for array subsection
-		# finally prepend with zero to account for very first burst index that is lost
-		burstIdx = np.insert(np.where(burstLoc[1:] - burstLoc[:-1] > 1)[0] + 1, 0, 0)
-
-		# Initialise Burst length array to be populated
-		burstLen = np.zeros(len(burstIdx)).astype(np.int)
-
-		for j in range(len(burstIdx)):
-			_length = 1
-			# Remember burstIdx is an index for the first burst photon in burstLoc
-			_idx = burstIdx[j]
-			while burstLoc[_idx+1] == burstLoc[_idx] + 1:
-				# if the indexes are adjacent in *burstLoc* then photon in _same_ burst
-				_length += 1
-				_idx += 1
-			burstLen[j] = _length
-		_hist, _bins = np.histogram(burstLen, bins = bins)
-		if (i == 0) | (i == cutNum - 1):
-			plt.plot(_bins[1:], _hist, color = jet(i + 1), label = '{0:.2g} us'.format(cuts[i] * 1e6))
-		plt.plot(_bins[1:], _hist, color = jet(i + 1))
-	plt.legend()
-	plt.yscale('log')
-	plt.ylabel('counts')
-	plt.xlabel('burst length')
-
-
+"""
+IGNORE
+"""
 def ex_test_func(filedir, all_hairpin_data):
 	print(filedir)
 	# Get files to join from this subdir
