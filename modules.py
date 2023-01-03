@@ -710,7 +710,8 @@ def parse_multiple_photon_files(file_list, tBounds, params, tauSettings = None, 
 		
 		# Add in parameter details (inefficient to do it this way but keeps it all together)
 		for key, val in params.items():
-			all_burst_data[key] = val
+			key_s = f'param_{key}'
+			burst_data[key_s] = val
 		
 		all_burst_data.append(burst_data)
 	return pd.concat(all_burst_data, ignore_index=True)
