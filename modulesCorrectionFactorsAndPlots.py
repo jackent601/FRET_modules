@@ -2,6 +2,7 @@ from scipy.stats import gaussian_kde
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import math
 import os
 
 """
@@ -160,7 +161,7 @@ def add_all_corrections(burst_data, Beta, Gamma, Alpha, Delta, E_column_name = '
 def calculate_and_add_all_corrections(burst_data, population_E_limits = [[0,1]], sample_percent = 0.05, plot_fig = False, Smask = [0.85, 0.15], ALEX2CDEmask = 20, FRET2CDEmask = 20, include_corrections = False):
     """
     Combines all of the above
-    Some default filtering (FRET/ALEX CDE) is currently hard coded but can be changed easily
+    Some default filtering (FRET/ALEX CDE) defaults
     """
     # Alpha and Delta First
     burst_data, alpha, delta = calculate_and_add_alpha_and_delta_correction(burst_data)
@@ -214,7 +215,105 @@ def calculate_and_add_corrections_by_group(processed_data, group_vals, group_nam
     return corrected_data, corrections_df
     
 """
-PLOTTING & UTILITIES
+PLOTTING
+"""
+
+"""
+S-E Plots
+"""
+
+def plot_S_E_kernel(E_vals, S_vals, title, ax = None, show_plot = True, save_fig = False, save_path = None, 
+                    bw_method_override = None, shade_val = 0.5, ax_lims = [[-0.1, 1.1], [-0.1, 1.1]]):
+    """
+    TODO - allow ax to be passed as argument (handy for functions below)
+    Plots S-E kernel density,
+    Requires E and S to already be suitably masked
+    """
+    # Get Kernel Density
+    if bw_method_override is None:
+        k = gaussian_kde([E_vals, S_vals], bw_method = 0.8 * len(E_vals)**(-0.2))
+    else:
+        raise("unhandled bw_method")
+    
+    # Get Kernel shading
+    ES = np.vstack([E_vals,S_vals])
+    z = k(ES)
+    
+    # Figure
+    if ax is None:
+        ax = plt.axes()
+    ax.scatter(E_vals, S_vals, c = z, cmap = 'jet', s = shade_val)
+    
+    # Labels
+    #lt.ylabel("S")
+    #plt.xlabel("E")
+    ax.set(xlabel = 'E', ylabel = 'S')
+    ax.set_title(title)
+    
+    # limits
+    ax.set_xlim(ax_lims[0][0], ax_lims[0][1])
+    ax.set_ylim(ax_lims[1][0], ax_lims[1][1])
+    
+    if save_fig:
+        plt.savefig(save_path)
+    
+    if show_plot:
+        plt.show()
+    return plt
+
+def plot_kernels_by_group(df, group_vals, group_name, cde_filter = True, E_column_name = 'E', S_column_name = 'S', title = 'Group {}', ALEX2CDEmask = 20, FRET2CDEmask = 20):
+    """
+    title can be customised using {} for g
+    """
+    for g in group_vals:
+        _df = df[df[group_name]==g]
+        plt_title = title.format(g)
+        if cde_filter:         
+            _df = typical_S_ALEX_FRET_CDE_filter(_df, ALEX2CDEmask = ALEX2CDEmask, FRET2CDEmask = FRET2CDEmask)
+        E = _df[E_column_name]
+        S = _df[S_column_name]
+        plot_S_E_kernel(E, S, plt_title) 
+
+def plot_kernels_by_group_side_by_side(df, group_vals, group_name, figs_per_row, cde_filter = True, E_column_name = 'E', S_column_name = 'S', title = 'Group {}', header = None, ALEX2CDEmask = 20, FRET2CDEmask = 20):
+    """
+    title can be customised using {} for g
+    """
+    num_rows = int(math.ceil(len(group_vals)/figs_per_row))
+    fig, axs = plt.subplots(num_rows, figs_per_row)
+
+    if header is not None:
+        fig.suptitle(header)
+
+    for indx, g in enumerate(group_vals):
+        
+        # Get subAxes    
+        row_num = indx//figs_per_row
+        column_number = indx%figs_per_row
+        _ax = axs[row_num, column_number]
+        
+        # Filter Data & Get vals
+        _df = df[df[group_name]==g]
+        if cde_filter:         
+            _df = typical_S_ALEX_FRET_CDE_filter(_df, ALEX2CDEmask = ALEX2CDEmask, FRET2CDEmask = FRET2CDEmask)
+        E_vals = _df[E_column_name]
+        S_vals = _df[S_column_name]
+        
+        # Get subplot
+        plt_title = title.format(g)
+        _ax = plot_S_E_kernel(E_vals, S_vals, plt_title, ax = _ax, show_plot = False) 
+        
+        # Hide x labels and tick labels for top plots and y ticks for right plots.
+    for ax in axs.flat:
+        ax.label_outer()   
+
+    return fig  
+
+"""
+E Distributions
+"""
+
+"""
+UTILITIES
 """
 
 def typical_S_ALEX_FRET_CDE_filter(data, S=None, ALEX2CDE=None, FRET2CDE=None, Smask = [0.85, 0.15], ALEX2CDEmask = 20, FRET2CDEmask = 20):
@@ -236,53 +335,6 @@ def typical_S_ALEX_FRET_CDE_filter(data, S=None, ALEX2CDE=None, FRET2CDE=None, S
     Total_Filter = S_Filter & Alex_Filter & CDE_Filter
     
     return data[Total_Filter]
-
-
-def plot_S_E_kernel(E_vals, S_vals, title, save_fig = False, save_path = None, 
-                    bw_method_override = None, shade_val = 0.5, ax_lims = [[-0.1, 1.1], [-0.1, 1.1]]):
-    """
-    Plots S-E kernel density,
-    Requires E and S to already be suitably masked
-    """
-    # Get Kernel Density
-    if bw_method_override is None:
-        k = gaussian_kde([E_vals, S_vals], bw_method = 0.8 * len(E_vals)**(-0.2))
-    else:
-        raise("unhandled bw_method")
-    
-    # Get Kernel shading
-    ES = np.vstack([E_vals,S_vals])
-    z = k(ES)
-    
-    # Figure
-    plt.figure()
-    plt.scatter(E_vals, S_vals, c = z, cmap = 'jet', s = shade_val)
-    
-    # Labels
-    plt.ylabel("S")
-    plt.xlabel("E")
-    plt.title(title)
-    
-    # limits
-    plt.xlim(ax_lims[0][0], ax_lims[0][1])
-    plt.ylim(ax_lims[1][0], ax_lims[1][1])
-    
-    if save_fig:
-        plt.savefig(save_path)
-    plt.show()
-
-def plot_kernels_by_group(df, group_vals, group_name, cde_filter = True, E_column_name = 'E', S_column_name = 'S', title = 'Group {}'):
-    """
-    title can be customised using {} for g
-    """
-    for g in group_vals:
-        _df = df[df[group_name]==g]
-        plt_title = title.format(g)
-        if cde_filter:         
-            _df = typical_S_ALEX_FRET_CDE_filter(_df)
-        E = _df[E_column_name]
-        S = _df[S_column_name]
-        plot_S_E_kernel(E, S, plt_title)      
 
 def calculate_relative_population_proportions(E, population_limits):
     """
