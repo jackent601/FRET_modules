@@ -221,10 +221,134 @@ PLOTTING
 """
 S-E Plots
 """
+def plot_x_y_kernel(x, y, ax = None, show_plot = True, save_fig = False, save_path = None, 
+                    bw_method_override = None, 
+                    plot_params = {
+                        'xlabel': '',
+                        'ylabel': '',
+                        'title': '',
+                        'xlims': [],
+                        'ylims': [],
+                        'alpha': 0.5}):
+    """
+    TODO - This should replace functions in plot_S_E
+    """
+    # Get Kernel Density
+    if bw_method_override is None:
+        k = gaussian_kde([x, y], bw_method = 0.8 * len(x)**(-0.2))
+    else:
+        raise("unhandled bw_method")
+
+    # Get Kernel shading
+    xy = np.vstack([x, y])
+    z = k(xy)
+
+    # Figure
+    if ax is None:
+        ax = plt.axes()
+    ax.scatter(x, y, c = z, cmap = 'jet', s = plot_params['alpha'])
+
+    # Labels
+    ax.set(xlabel = plot_params['xlabel'], ylabel = plot_params['ylabel'])
+    ax.set_title(plot_params['title'])
+
+    # limits
+    if len(plot_params['xlims']) == 2:
+        ax.set_xlim(plot_params['xlims'][0], plot_params['xlims'][1])
+    if len(plot_params['ylims']) == 2:
+        ax.set_ylim(plot_params['ylims'][0], plot_params['ylims'][1])
+
+    if save_fig:
+        plt.savefig(save_path)
+
+    if show_plot:
+        plt.show()
+
+    return ax
+
+
+def plot_x_y_kernel_by_group(df, group_vals, group_name, x_name, y_name, ax=None, show_plot=True, save_fig=False, save_path=None,
+                             bw_method_override=None,
+                             plot_params={
+                                 'xlabel': '',
+                                 'ylabel': '',
+                                 'title': '',
+                                 'xlims': [],
+                                 'ylims': [],
+                                 'alpha': 0.5}):
+    """
+    title can be customised using {} for g
+    """
+    ax_list = []
+    for g in group_vals:
+        _df = df[df[group_name]==g]
+        _plot_params = plot_params.copy()
+        _plot_params['title'] = plot_params['title'].format(g)
+        x = _df[x_name]
+        y = _df[y_name]
+        ax_list.append(plot_x_y_kernel(x, y, plot_params=_plot_params, show_plot=show_plot, save_fig=save_fig, save_path=save_path))
+    
+    return ax_list
+
+def plot_x_y_kernels_by_group_side_by_side(df, group_vals, group_name, figs_per_row, x_name, y_name, save_fig=False, save_path=None,
+                             bw_method_override=None,
+                             plot_params={
+                                 'xlabel': '',
+                                 'ylabel': '',
+                                 'title': '',
+                                 'xlims': [],
+                                 'ylims': [],
+                                 'alpha': 0.5},
+                                 header = None):
+
+#(df, group_vals, group_name, figs_per_row, cde_filter = True, E_column_name = 'E', S_column_name = 'S', title = 'Group {}', header = None, ALEX2CDEmask = 20, FRET2CDEmask = 20):
+    """
+    title can be customised using {} for g
+    """
+    num_rows = int(math.ceil(len(group_vals)/figs_per_row))
+    fig, axs = plt.subplots(num_rows, figs_per_row)
+
+    if header is not None:
+        fig.suptitle(header)
+
+    # Get All Plots
+    #all_plots = plot_x_y_kernel_by_group(df, group_vals, group_name, x_name=x_name, y_name=y_name, plot_params=plot_params)
+
+    # Assign Plots
+    for indx, g in enumerate(group_vals):
+    #for indx, _ax in enumerate(all_plots):
+        
+        # Get subAxes    
+        row_num = indx//figs_per_row
+        column_number = indx%figs_per_row
+        #axs[row_num, column_number] = _ax
+        _ax = axs[row_num, column_number]
+        
+        # Filter Data & Get vals
+        _df = df[df[group_name]==g]
+        x = _df[x_name]
+        y = _df[y_name]
+        
+        # Get subplot
+        _plot_params = plot_params.copy()
+        _plot_params['title'] = plot_params['title'].format(g)
+        _ax = plot_x_y_kernel(x, y, ax = _ax, show_plot = False, plot_params=_plot_params) 
+        
+    # Hide x labels and tick labels for top plots and y ticks for right plots.
+    for ax in axs.flat:
+        ax.label_outer()   
+
+    return fig  
+
+
+"""
+Old S-E Kernels, still used but should be updated to use general function
+"""
 
 def plot_S_E_kernel(E_vals, S_vals, title, ax = None, show_plot = True, save_fig = False, save_path = None, 
                     bw_method_override = None, shade_val = 0.5, ax_lims = [[-0.1, 1.1], [-0.1, 1.1]]):
     """
+    TODO - Should be replaced using the plot general x, y kernel
     TODO - allow ax to be passed as argument (handy for functions below)
     Plots S-E kernel density,
     Requires E and S to already be suitably masked
@@ -259,9 +383,11 @@ def plot_S_E_kernel(E_vals, S_vals, title, ax = None, show_plot = True, save_fig
     
     if show_plot:
         plt.show()
-    return plt
+    
+    return ax
 
-def plot_kernels_by_group(df, group_vals, group_name, cde_filter = True, E_column_name = 'E', S_column_name = 'S', title = 'Group {}', ALEX2CDEmask = 20, FRET2CDEmask = 20):
+
+def plot_kernels_by_group(df, group_vals, group_name, cde_filter=True, E_column_name='E', S_column_name='S', title='Group {}', ALEX2CDEmask=20, FRET2CDEmask=20):
     """
     title can be customised using {} for g
     """
@@ -308,9 +434,6 @@ def plot_kernels_by_group_side_by_side(df, group_vals, group_name, figs_per_row,
 
     return fig  
 
-"""
-E Distributions
-"""
 
 """
 UTILITIES
@@ -353,6 +476,18 @@ def calculate_relative_population_proportions(E, population_limits):
     population_proportions = [p/total_population_count for p in populations]
     
     return population_proportions, populations
+
+def calculcalculate_relative_population_proportions_by_group(df, group_vals, group_name, population_limits, E_column_name = 'E3'):
+    """
+    See above
+    """
+    population_dict = {}
+    for g in group_vals:
+        _df = df[df[group_name]==g]
+        _E = _df[E_column_name]
+        p_proportions, p = calculate_relative_population_proportions(E=_E, population_limits=population_limits)
+        population_dict[g] = {'pop_proportions': p_proportions, 'populations':p}
+    return population_dict
 
 
 def get_dict_string(d):
