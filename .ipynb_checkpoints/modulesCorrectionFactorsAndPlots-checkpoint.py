@@ -56,8 +56,8 @@ def add_alpha_and_delta_correction(burst_data, Alpha, Delta):
     
     return burst_data
 
-def calculate_and_add_alpha_and_delta_correction(burst_data, *kwargs):
-    alpha, delta = calculate_alpha_and_delta_correction(burst_data, *kwargs)
+def calculate_and_add_alpha_and_delta_correction(burst_data):
+    alpha, delta = calculate_alpha_and_delta_correction(burst_data)
     burst_data = add_alpha_and_delta_correction(burst_data, alpha, delta)
     return burst_data, alpha, delta
 

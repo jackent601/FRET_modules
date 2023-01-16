@@ -424,10 +424,6 @@ def burstAnalysisSE_WithRaw(photonData, burstData = pd.DataFrame({}), debug = Fa
 	numAA = np.zeros(burstNumber)
 	burstDuration = np.zeros(burstNumber)
 
-	# Time data for continuous runs
-	T_starts = np.zeros(burstNumber)
-	T_ends = np.zeros(burstNumber)
-
 	TDA = np.zeros(burstNumber)
 
 	E = np.zeros(burstNumber)
@@ -435,8 +431,6 @@ def burstAnalysisSE_WithRaw(photonData, burstData = pd.DataFrame({}), debug = Fa
 	
 	for i in range(burstNumber):
 		_df = photonData[photonData.burst == i]
-		T_starts[i] = _df['T'].values[0]
-		T_ends[i] = _df['T'].values[-1]
 		burstDuration[i] = _df['T'].values[-1] - _df['T'].values[0]
 
 		# DD (minus 1 has been removed from original func)
@@ -483,10 +477,6 @@ def burstAnalysisSE_WithRaw(photonData, burstData = pd.DataFrame({}), debug = Fa
 	burstData['S'] = S
 	burstData['TDA'] = TDA
 	burstData['duration'] = burstDuration
-
-	# Time info for continuous runs
-	burstData['T_start'] = T_starts
-	burstData['T_end'] = T_ends
 
 	return photonData, burstData
 
@@ -686,7 +676,7 @@ def burstAnalysisTau(photonData, tauSettings, burstData = pd.DataFrame({})):
 
 	return photonData, burstData
 
-def parse_multiple_photon_files_list(file_list, tBounds, params, tauSettings = None, debug=False):
+def parse_multiple_photon_files(file_list, tBounds, params, tauSettings = None, debug=False):
 	"""
 	Loop through all photon data
 	Note: The total data set should first be combined then the burst analysis done, this would require updating macroscopic times
@@ -724,15 +714,6 @@ def parse_multiple_photon_files_list(file_list, tBounds, params, tauSettings = N
 			burst_data[key_s] = val
 		
 		all_burst_data.append(burst_data)
-	return all_burst_data
-
-def parse_multiple_photon_files(file_list, tBounds, params, tauSettings = None, debug=False):
-	"""
-	Loop through all photon data
-	Note: The total data set should first be combined then the burst analysis done, this would require updating macroscopic times
-	"""
-
-	all_burst_data = parse_multiple_photon_files_list(file_list, tBounds, params, tauSettings = tauSettings, debug=debug)
 	return pd.concat(all_burst_data, ignore_index=True)
 
 """

@@ -182,7 +182,7 @@ def plot_group_fit_together(group_fits, curve_fit, x_vals, title, plot_bar=False
     if legend:
         plt.legend()
     plt.title(title)
-    plt.show()
+    return plt
 
 # def get_and_fit_hist(ax, 
 #                      x, 
