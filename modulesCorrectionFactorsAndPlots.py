@@ -132,7 +132,7 @@ def calculate_beta_and_gamma_correction(burst_data, population_E_limits = [[0,1]
     Beta = a + b - 1
     Gamma = (a - 1) / (a + b - 1)
     
-    return Beta, Gamma
+    return Beta, Gamma, exp_E, exp_S
 
 def add_all_corrections(burst_data, Beta, Gamma, Alpha, Delta, E_column_name = 'E3', S_column_name = 'S3'):
     """
@@ -174,7 +174,7 @@ def calculate_and_add_all_corrections(burst_data, population_E_limits = [[0,1]],
     S2 = cde_filtered_data['S2']
 
     # Then Beta and Gamma
-    beta, gamma = calculate_beta_and_gamma_correction(burst_data, population_E_limits = population_E_limits, E = E2, S = S2, sample_percent = sample_percent, plot_fig = plot_fig)
+    beta, gamma, exp_E, exp_S = calculate_beta_and_gamma_correction(burst_data, population_E_limits = population_E_limits, E = E2, S = S2, sample_percent = sample_percent, plot_fig = plot_fig)
     burst_data = add_all_corrections(burst_data, beta, gamma, alpha, delta)
 
     # Include correction details
@@ -184,7 +184,7 @@ def calculate_and_add_all_corrections(burst_data, population_E_limits = [[0,1]],
         burst_data['gamma'] = gamma
         burst_data['delta'] = delta
 
-    return burst_data, alpha, delta, beta, gamma
+    return burst_data, alpha, delta, beta, gamma, exp_E, exp_S
 
 
 def calculate_and_add_corrections_by_group(processed_data, group_vals, group_name, population_E_limits=[[0,1]],plot_fig=True, include_corrections = True):
@@ -193,6 +193,7 @@ def calculate_and_add_corrections_by_group(processed_data, group_vals, group_nam
     Some default filtering (FRET/ALEX CDE) is currently hard coded but can be changed easily
     """
     corrections = {}
+    beta_gamma_ES_points = {}
     df_copies = {}
 
     for g in group_vals:
@@ -202,17 +203,19 @@ def calculate_and_add_corrections_by_group(processed_data, group_vals, group_nam
         _df_copy = processed_data[processed_data[group_name]==g].copy()
         
         # Run Corrections
-        _df_copy, _alpha, _delta, _beta, _gamma = \
+        _df_copy, _alpha, _delta, _beta, _gamma, _exp_E, _exp_S = \
         calculate_and_add_all_corrections(_df_copy, population_E_limits=population_E_limits,plot_fig=plot_fig, include_corrections = include_corrections)
 
         # Store Results
         corrections[g] = {'alpha': _alpha, 'beta': _beta, 'delta': _delta, 'gamma':_gamma}
         df_copies[g] = _df_copy
+        beta_gamma_ES_points[g] = {'exp_E': _exp_E, 'exp_S': _exp_S}
+
 
     corrections_df = pd.DataFrame(corrections)
     corrected_data = pd.concat([df_copies[g] for g in df_copies.keys()], ignore_index=True)
     
-    return corrected_data, corrections_df
+    return corrected_data, corrections_df, beta_gamma_ES_points
     
 """
 PLOTTING
