@@ -316,10 +316,44 @@ def getPhotonData(file, tBounds = None):
 		
 		return df
 
-# Burst search, writes burst and noise index into DataFrame
-# ** see visualiseIRF for an explanation of how burst lengths calculated
-def findBurst(photonData, params, debug=True):
+# Burst analysis only, findBurst defaults uses this to update a database
+def findNoise(photonData, params, debug = False):
+	"""
+	Finds burst data, separated from firdAndAddBurst to allow quick burst analysis to 
+	determine processing parameters (by setting burst/noise lengths to 1) 
+	"""
+	# Calculate raw interphoton times with Lee filter
+	interPhotonTime = photonData['T'].values[1:] - photonData['T'].values[:-1]
+	interPhotonTime = LeeFilter(interPhotonTime)
+	
+	noiseLoc = np.argwhere(interPhotonTime > params['noiseCut'])[:, 0]
+	noiseLoc = np.append(noiseLoc, noiseLoc[-1])
 
+	noiseIdx = np.insert(np.where(noiseLoc[1:] - noiseLoc[:-1] > 1)[0] + 1, 0, 0)
+		
+	noiseLen = np.zeros(len(noiseIdx)).astype(np.int)
+	for i in range(len(noiseIdx)):
+		_length = 1
+		_idx = noiseIdx[i]
+		while noiseLoc[_idx+1] == noiseLoc[_idx] + 1:
+			_length += 1
+			_idx += 1
+		noiseLen[i] = _length
+	
+	noiseMask = noiseLen > params['noiseLen']
+	trueNoiseIdx = noiseIdx[noiseMask]
+	trueNoiseLen = noiseLen[noiseMask]
+	
+	if debug:
+		print(f'\tRaw Noise Count: {len(trueNoiseLen)}, Avg length: {np.mean(trueNoiseLen):0.2f}')
+
+	return noiseLoc, trueNoiseIdx, trueNoiseLen
+
+def findBurst(photonData, params, debug = False):
+	"""
+	Finds burst data, separated from firdAndAddBurst to allow quick burst analysis to 
+	determine processing parameters (by setting burst/noise lengths to 1) 
+	"""
 	# Calculate raw interphoton times with Lee filter
 	interPhotonTime = photonData['T'].values[1:] - photonData['T'].values[:-1]
 	interPhotonTime = LeeFilter(interPhotonTime)
@@ -327,11 +361,7 @@ def findBurst(photonData, params, debug=True):
 	burstLoc = np.argwhere(interPhotonTime < params['burstCut'])[:, 0]
 	burstLoc = np.append(burstLoc, burstLoc[-1])
 	
-	noiseLoc = np.argwhere(interPhotonTime > params['noiseCut'])[:, 0]
-	noiseLoc = np.append(noiseLoc, noiseLoc[-1])
-	
 	burstIdx = np.insert(np.where(burstLoc[1:] - burstLoc[:-1] > 1)[0] + 1, 0, 0)
-	noiseIdx = np.insert(np.where(noiseLoc[1:] - noiseLoc[:-1] > 1)[0] + 1, 0, 0)
 	
 	burstLen = np.zeros(len(burstIdx)).astype(np.int)
 	for i in range(len(burstIdx)):
@@ -342,22 +372,64 @@ def findBurst(photonData, params, debug=True):
 			_idx += 1
 		burstLen[i] = _length
 		
-	noiseLen = np.zeros(len(noiseIdx)).astype(np.int)
-	for i in range(len(noiseIdx)):
-		_length = 1
-		_idx = noiseIdx[i]
-		while noiseLoc[_idx+1] == noiseLoc[_idx] + 1:
-			_length += 1
-			_idx += 1
-		noiseLen[i] = _length
-		
 	burstMask = burstLen > params['burstLen']
 	trueBurstIdx = burstIdx[burstMask]
 	trueBurstLen = burstLen[burstMask]
 	
-	noiseMask = noiseLen > params['noiseLen']
-	trueNoiseIdx = noiseIdx[noiseMask]
-	trueNoiseLen = noiseLen[noiseMask]
+	if debug:
+		print(f'\tRaw Burst Count: {len(trueBurstLen)}, Avg length: {np.mean(trueBurstLen):0.2f}')
+		# print(f'\tNoise Count: {len(trueNoiseLen)}, Avg length: {np.mean(trueNoiseLen):0.2f}')
+
+	return burstLoc, trueBurstIdx, trueBurstLen#, noiseLoc, trueNoiseIdx, trueNoiseLen
+
+# Burst search, writes burst and noise index into DataFrame
+# ** see visualiseIRF for an explanation of how burst lengths calculated
+def findAndAddBurst(photonData, params, debug=True):
+	"""
+	Uses findBursts/Noise to find and add burst/noise info to dataframes
+	"""
+
+	# Calculate raw interphoton times with Lee filter
+	# interPhotonTime = photonData['T'].values[1:] - photonData['T'].values[:-1]
+	# interPhotonTime = LeeFilter(interPhotonTime)
+	
+	# burstLoc = np.argwhere(interPhotonTime < params['burstCut'])[:, 0]
+	# burstLoc = np.append(burstLoc, burstLoc[-1])
+	
+	# noiseLoc = np.argwhere(interPhotonTime > params['noiseCut'])[:, 0]
+	# noiseLoc = np.append(noiseLoc, noiseLoc[-1])
+	
+	# burstIdx = np.insert(np.where(burstLoc[1:] - burstLoc[:-1] > 1)[0] + 1, 0, 0)
+	# noiseIdx = np.insert(np.where(noiseLoc[1:] - noiseLoc[:-1] > 1)[0] + 1, 0, 0)
+	
+	# burstLen = np.zeros(len(burstIdx)).astype(np.int)
+	# for i in range(len(burstIdx)):
+	# 	_length = 1
+	# 	_idx = burstIdx[i]
+	# 	while burstLoc[_idx+1] == burstLoc[_idx] + 1:
+	# 		_length += 1
+	# 		_idx += 1
+	# 	burstLen[i] = _length
+		
+	# noiseLen = np.zeros(len(noiseIdx)).astype(np.int)
+	# for i in range(len(noiseIdx)):
+	# 	_length = 1
+	# 	_idx = noiseIdx[i]
+	# 	while noiseLoc[_idx+1] == noiseLoc[_idx] + 1:
+	# 		_length += 1
+	# 		_idx += 1
+	# 	noiseLen[i] = _length
+		
+	# burstMask = burstLen > params['burstLen']
+	# trueBurstIdx = burstIdx[burstMask]
+	# trueBurstLen = burstLen[burstMask]
+	
+	# noiseMask = noiseLen > params['noiseLen']
+	# trueNoiseIdx = noiseIdx[noiseMask]
+	# trueNoiseLen = noiseLen[noiseMask]
+
+	burstLoc, trueBurstIdx, trueBurstLen = findBurst(photonData=photonData, params=params, debug=debug)
+	noiseLoc, trueNoiseIdx, trueNoiseLen = findNoise(photonData=photonData, params=params, debug=debug)
 	
 	# Write to df re. burst and noise state
 	photonData['burst'] = int(-1)
@@ -373,8 +445,9 @@ def findBurst(photonData, params, debug=True):
 		_j = int(noiseLoc[trueNoiseIdx[i] + trueNoiseLen[i] - 1] + 1)
 		photonData.loc[_i: _j, 'noise'] = np.ones(len(photonData.loc[_i : _j, 'noise']), dtype = int) * i
 		
-	if debug:
-		print('Burst count: {0:}\nNoise count: {1:}\n'.format(len(trueBurstIdx), len(trueNoiseIdx)))
+	# if debug:
+	# 	print(f'Burst Count: {len(trueBurstLen)}, Avg length: {np.mean(trueBurstLen):0.2f}')
+	# 	print(f'Noise Count: {len(trueNoiseLen)}, Avg length: {np.mean(trueNoiseLen):0.2f}')
 
 	return photonData
 
@@ -686,10 +759,11 @@ def burstAnalysisTau(photonData, tauSettings, burstData = pd.DataFrame({})):
 
 	return photonData, burstData
 
-def parse_multiple_photon_files_list(file_list, tBounds, params, tauSettings = None, debug=False):
+def parse_multiple_photon_files_list(file_list, tBounds, params, CDE=True, tauSettings=None, debug=False):
 	"""
 	Loop through all photon data
 	Note: The total data set should first be combined then the burst analysis done, this would require updating macroscopic times
+	CDE can be set to False to speed up analysis for preliminary analysis to determine processing params 
 	"""
 
 	all_burst_data = []
@@ -700,23 +774,25 @@ def parse_multiple_photon_files_list(file_list, tBounds, params, tauSettings = N
 		photon_data = getPhotonData(file=this_sample, tBounds=tBounds)
 
 		# Find and Label Bursts
-		burst_labeled_photon_data = findBurst(photonData = photon_data, params=params, debug=debug)
+		burst_labeled_photon_data = findAndAddBurst(photonData = photon_data, params=params, debug=debug)
 
 		# Analyse Bursts
 		burst_labeled_photon_data, burst_data = burstAnalysisSE_WithRaw(photonData=burst_labeled_photon_data, burstData = pd.DataFrame({}))
 
 		# ALEX FRET 2 CDE Calculations for corrections
-		burst_labeled_photon_data, burst_data = burstAnalysis2CDE(photonData = burst_labeled_photon_data, burstData = burst_data)
+		if CDE:
+			burst_labeled_photon_data, burst_data = burstAnalysis2CDE(photonData = burst_labeled_photon_data, burstData = burst_data)
 		
 		# tau calculations
 		if tauSettings is not None:
 			burst_labeled_photon_data, burst_data = burstAnalysisTau(photonData = burst_labeled_photon_data, tauSettings = tauSettings, burstData = burst_data)
 		
 		if debug:
-			print(f'Adding: {this_sample}')
-			print(f'photo data length: {len(photon_data)}')
-			print(f'burst labelled photon data length: {len(burst_labeled_photon_data)}')
-			print(f'ALEX 2 CDE: {len(burst_data)}')	
+			print(f'\tAdding: {this_sample}')
+			print(f'\t\tphoto data length: {len(photon_data)}')
+			print(f'\t\tburst labelled photon data length: {len(burst_labeled_photon_data)}')
+			print(f'\t\tBurst Data Points: {len(burst_data)}')	
+			print('')
 		
 		# Add in parameter details (inefficient to do it this way but keeps it all together)
 		for key, val in params.items():

@@ -73,6 +73,27 @@ def getCutDataDictFromPTU_PositionalExperiments(root, tBounds, cuts, saveCutData
                 _cutData[acq_num] = {'noise': _noiseCutData, 'burst':_burstCutData}
 
             cutData[positionDir] = _cutData
+
+            # reverse Dictionary (easier to calcualte averages)
+            # Not done previously to prevent reloading photon data multiple times
+            #for cut in cuts:
+
+
+            # _cutData = {}
+            # for acq in acquisitions:
+            #     acq_num = acq.split(os.sep)[-2]
+                
+            #     # Load & Add Photon Data
+            #     _photon_data = M.getPhotonData(file=acq, tBounds=tBounds)
+
+            #     # Calculate Burst Analysis
+            #     _noiseCutData = {}
+            #     _burstCutData = {}
+            #     for cut in cuts:
+            #         _noiseCutData[cut], _burstCutData[cut] = getNoiseAndBurstCutDicts(photonData=_photon_data, cut=cut)
+            #     _cutData[acq_num] = {'noise': _noiseCutData, 'burst':_burstCutData}
+
+            # cutData[positionDir] = _cutData
     
     # Save checks are carried out above
     if saveCutData:
