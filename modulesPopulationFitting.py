@@ -12,6 +12,26 @@ to clean up the jupyter notebooks
 Functions are specific to fitting the E distributions to funnctions provided
 """
 
+"""
+Typical Functions to Fit Histogram
+"""
+def Peak1(_x, *params):
+    x0, sigma, A = params
+    val = A * np.exp(-(_x - x0)** 2 / (2 * sigma**2))
+    return val
+
+def Peaks2(_x, *params):
+    x0, sigma, A = params[0:2], params[2:4], params[4:6]
+    val = A[-1] * np.exp(-(_x - x0[-1])** 2 / (2 * sigma[-1]**2))
+    for i in range(1):
+        val += A[i] * np.exp(-(_x - x0[i])** 2 / (2 * sigma[i]**2))
+    return val
+
+
+"""
+Histogram Fitting
+"""
+
 
 def fit_hist(x, bins, curve_func, initial_guesses=None, bounds = None, density = True):
     """
