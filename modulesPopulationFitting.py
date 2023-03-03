@@ -31,6 +31,11 @@ def Peaks2(_x, *params):
 """
 Histogram Fitting
 """
+def getBins(lower, upper, n):
+    EBins = np.linspace(lower, upper, n)
+    dBin = abs(EBins[1]-EBins[0])
+    EBinCentres = EBins[:-1]+dBin/2
+    return EBins, EBinCentres, dBin
 
 
 def fit_hist(x, bins, curve_func, initial_guesses=None, bounds = None, density = True):
